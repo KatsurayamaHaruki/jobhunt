@@ -7,6 +7,7 @@ const CATS = ['大手SIer', '金融IT子会社', 'AI・Web系', '事業会社（
 const STATUSES = ['検討中', 'エントリー済', 'ES提出', 'Webテスト', '一次面接', '二次面接', '最終面接', '内定', '見送り'];
 const LIVE = new Set(['エントリー済', 'ES提出', 'Webテスト', '一次面接', '二次面接', '最終面接']);
 const TASK_LABELS = ['ES締切', 'Webテスト', '説明会', '一次面接', '二次面接', '最終面接', '面談'];
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 const jpLen = (s) => [...(s || '')].length;
 function dayDiff(d) { if (!d) return null; const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((new Date(d + 'T00:00:00') - t) / 86400000); }
@@ -23,11 +24,14 @@ export default function Portal() {
   const [logs, setLogs] = useState([]);
   const [tab, setTab] = useState('dash');
   const [filters, setFilters] = useState({ cat: '', status: '', sort: 'deadline' });
-  const [modal, setModal] = useState(null); // null | {edit?} form object
-  const [toast, setToast] = useState('');
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(() => new Set());
+  const [quickName, setQuickName] = useState('');
+  const [modal, setModal] = useState(null);
+  const [toast, setToast] = useState(null); // { msg, actionLabel?, action? }
   const fileRef = useRef(null);
 
-  const showToast = useCallback((m) => { setToast(m); setTimeout(() => setToast(''), 2300); }, []);
+  const showToast = useCallback((m) => { setToast({ msg: m }); setTimeout(() => setToast((t) => (t && t.msg === m ? null : t)), 2300); }, []);
 
   // auth
   useEffect(() => {
@@ -60,6 +64,17 @@ export default function Portal() {
     const { error } = await supabase.from('companies').update(patch).eq('id', id);
     if (error) showToast('保存に失敗: ' + error.message);
   }
+
+  // 手動のステータス変更も履歴に残す（AIの自動更新と同じ場所で追える）
+  async function setStatus(id, status) {
+    const c = companies.find((x) => x.id === id);
+    if (!c || c.status === status) return;
+    await patchCompany(id, { status });
+    const row = { user_id: session.user.id, company_id: id, company_name: c.name, field: 'status', old_value: c.status, new_value: status, source: 'manual' };
+    await supabase.from('status_log').insert(row);
+    setLogs((prev) => [{ ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }, ...prev]);
+  }
+
   async function saveCompanyForm(form) {
     if (!form.name.trim()) { showToast('企業名を入力'); return; }
     if (form.id) {
@@ -73,12 +88,44 @@ export default function Portal() {
     }
     setModal(null);
   }
-  async function deleteCompany(id) {
-    if (!confirm('この企業を削除しますか？')) return;
-    const { error } = await supabase.from('companies').delete().eq('id', id);
-    if (error) { showToast('削除に失敗'); return; }
-    setCompanies((cs) => cs.filter((c) => c.id !== id));
+
+  async function quickAdd() {
+    const name = quickName.trim();
+    if (!name) return;
+    const row = { user_id: session.user.id, name, category: CATS[0], vote: 'B', status: '検討中', tasks: [], es_drafts: [] };
+    const { data, error } = await supabase.from('companies').insert(row).select().single();
+    if (error) { showToast('追加に失敗: ' + error.message); return; }
+    setCompanies((cs) => [...cs, data]);
+    setQuickName('');
+    showToast(`${name} を追加`);
   }
+
+  // 削除は確認ダイアログではなく Undo 方式（誤操作してもすぐ戻せる）
+  async function deleteCompanies(ids) {
+    if (ids.length === 0) return;
+    const rows = companies.filter((c) => ids.includes(c.id));
+    const { error } = await supabase.from('companies').delete().in('id', ids);
+    if (error) { showToast('削除に失敗: ' + error.message); return; }
+    setCompanies((cs) => cs.filter((c) => !ids.includes(c.id)));
+    setSelected(new Set());
+    const msg = `${ids.length}社を削除`;
+    setToast({
+      msg,
+      actionLabel: '元に戻す',
+      action: async () => {
+        const { data, error: e2 } = await supabase.from('companies').insert(rows).select();
+        if (e2) { showToast('復元に失敗: ' + e2.message); return; }
+        setCompanies((cs) => [...cs, ...(data || [])]);
+        setToast(null);
+      },
+    });
+    setTimeout(() => setToast((t) => (t && t.msg === msg ? null : t)), 6000);
+  }
+
+  function toggleSelect(id) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
   function addTask(c, label, date) {
     if (!date) { showToast('日付を選んで'); return; }
     patchCompany(c.id, { tasks: [...(c.tasks || []), { id: crypto.randomUUID(), label, date, done: false }] });
@@ -138,7 +185,10 @@ export default function Portal() {
     .sort((a, b) => a.diff - b.diff);
 
   const nextDiff = (c) => { const ds = (c.tasks || []).filter((t) => !t.done && t.date).map((t) => dayDiff(t.date)).filter((d) => d !== null && d >= 0); return ds.length ? Math.min(...ds) : 9999; };
-  let list = companies.filter((c) => (!filters.cat || c.category === filters.cat) && (!filters.status || c.status === filters.status));
+  let list = companies.filter((c) =>
+    (!filters.cat || c.category === filters.cat) &&
+    (!filters.status || c.status === filters.status) &&
+    (!q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase())));
   if (filters.sort === 'deadline') list = [...list].sort((a, b) => nextDiff(a) - nextDiff(b));
   else if (filters.sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
   else list = [...list].sort((a, b) => (a.vote || 'Z').localeCompare(b.vote || 'Z'));
@@ -151,17 +201,22 @@ export default function Portal() {
           <span className="sub">{session.user.email}</span>
         </div>
         <div className="toolbar">
+          <div className="quick-add">
+            <input value={quickName} onChange={(e) => setQuickName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && quickAdd()} placeholder="社名を入力して Enter で追加" />
+            <button className="btn primary" onClick={quickAdd}>＋</button>
+          </div>
           <button className="btn" onClick={exportJson}>書き出し</button>
           <button className="btn" onClick={() => fileRef.current.click()}>読み込み</button>
           <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }}
                  onChange={(e) => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; }} />
-          <button className="btn primary" onClick={() => setModal({ ...blank })}>＋ 企業</button>
           <button className="btn" onClick={() => supabase.auth.signOut()}>ログアウト</button>
         </div>
       </div>
 
       <div className="tabs">
         <button className={tab === 'dash' ? 'on' : ''} onClick={() => setTab('dash')}>ダッシュボード</button>
+        <button className={tab === 'calendar' ? 'on' : ''} onClick={() => setTab('calendar')}>カレンダー</button>
+        <button className={tab === 'kanban' ? 'on' : ''} onClick={() => setTab('kanban')}>カンバン</button>
         <button className={tab === 'es' ? 'on' : ''} onClick={() => setTab('es')}>ES作成</button>
         <button className={tab === 'docs' ? 'on' : ''} onClick={() => setTab('docs')}>資料</button>
         <button className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>履歴{logs.length ? ` (${logs.length})` : ''}</button>
@@ -176,6 +231,9 @@ export default function Portal() {
               <span className="muted">（完了済みにするか、状況を更新してください）</span>
             </div>
           )}
+
+          <FunnelStats companies={companies} onPick={(s) => setFilters({ ...filters, status: filters.status === s ? '' : s })} active={filters.status} />
+
           <div className="hero">
             <div className="hero-label">次にやること（締切順）</div>
             <div className="rail">
@@ -196,6 +254,7 @@ export default function Portal() {
           </div>
 
           <div className="filters">
+            <input className="searchbox" value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 企業名で検索" />
             <select value={filters.cat} onChange={(e) => setFilters({ ...filters, cat: e.target.value })}>
               <option value="">全カテゴリ</option>{CATS.map((v) => <option key={v}>{v}</option>)}
             </select>
@@ -211,14 +270,24 @@ export default function Portal() {
           </div>
 
           {companies.length === 0 ? (
-            <div className="emptystate">まだ企業がありません。「＋ 企業」か「読み込み」から。</div>
+            <div className="emptystate">まだ企業がありません。上の入力欄か「読み込み」から。</div>
           ) : (
             <div className="cards">
-              {list.map((c) => <CompanyCard key={c.id} c={c} onEdit={() => setModal({ ...c })} onDelete={() => deleteCompany(c.id)} onAddTask={addTask} onRemoveTask={removeTask} />)}
+              {list.map((c) => (
+                <CompanyCard key={c.id} c={c}
+                  selected={selected.has(c.id)} onToggleSelect={() => toggleSelect(c.id)}
+                  onStatus={(s) => setStatus(c.id, s)}
+                  onEdit={() => setModal({ ...c })} onDelete={() => deleteCompanies([c.id])}
+                  onAddTask={addTask} onRemoveTask={removeTask} onDoneTask={doneTask} />
+              ))}
             </div>
           )}
         </>
       )}
+
+      {tab === 'calendar' && <CalendarView companies={companies} onDone={doneTask} />}
+
+      {tab === 'kanban' && <KanbanView companies={companies} onStatus={setStatus} />}
 
       {tab === 'es' && <ESPanel companies={companies} onSaveDrafts={(cid, drafts) => patchCompany(cid, { es_drafts: drafts })} showToast={showToast} />}
 
@@ -231,7 +300,7 @@ export default function Portal() {
           </div>
           <div className="es-card" style={{ marginBottom: 16 }}>
             <h3>基本プロフィール</h3>
-            <textarea className="es-out" style={{ minHeight: 120 }} value={docs.profile} onChange={(e) => setDocs({ ...docs, profile: e.target.value })} placeholder="氏名・学歴・スキルなどの台帳本文を貼り付け" />
+            <textarea className="es-out" style={{ minHeight: 120 }} value={docs.profile} onChange={(e) => setDocs({ ...docs, profile: e.target.value })} placeholder="氏名・学歴・スキルなどの台帳本文を貼り付け（tools/sync-profile.mjs で台帳から自動同期も可）" />
           </div>
           <button className="btn primary" onClick={saveDocs}>資料を保存</button>
           <span className={`docs-status ${jpLen(docs.master_doc) ? 'set' : 'unset'}`}>
@@ -265,23 +334,55 @@ export default function Portal() {
         </>
       )}
 
+      {selected.size > 0 && (
+        <div className="bulkbar">
+          <span>{selected.size}社を選択中</span>
+          <button className="btn" onClick={() => setSelected(new Set())}>選択解除</button>
+          <button className="btn danger" onClick={() => deleteCompanies([...selected])}>まとめて削除</button>
+        </div>
+      )}
+
       {modal && <CompanyModal form={modal} setForm={setModal} onSave={() => saveCompanyForm(modal)} onClose={() => setModal(null)} />}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className="toast">
+          {toast.msg}
+          {toast.action && <button className="toast-action" onClick={toast.action}>{toast.actionLabel}</button>}
+        </div>
+      )}
     </div>
   );
 }
 
-function CompanyCard({ c, onEdit, onDelete, onAddTask, onRemoveTask }) {
+function FunnelStats({ companies, onPick, active }) {
+  if (companies.length === 0) return null;
+  const counts = STATUSES.map((s) => [s, companies.filter((c) => c.status === s).length]);
+  return (
+    <div className="stats">
+      {counts.map(([s, n]) => (
+        <button key={s} className={`statchip ${statusClass(s)} ${active === s ? 'on' : ''}`} onClick={() => onPick(s)} disabled={n === 0}>
+          <span className="statn">{n}</span><span className="stats-label">{s}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onDoneTask }) {
   const [label, setLabel] = useState(TASK_LABELS[0]);
   const [date, setDate] = useState('');
   const tasks = (c.tasks || []).slice().sort((a, b) => (a.date || '9').localeCompare(b.date || '9'));
   return (
-    <div className="card">
+    <div className={`card ${selected ? 'sel' : ''}`}>
       <div className="row1">
-        <div><h3 className="name">{c.name}</h3><div className="cat">{c.category}</div></div>
+        <div className="row1-left">
+          <input type="checkbox" className="card-check" checked={selected} onChange={onToggleSelect} title="選択（一括削除用）" />
+          <div><h3 className="name">{c.name}</h3><div className="cat">{c.category}</div></div>
+        </div>
         <span className="vote">{c.vote || '-'}</span>
       </div>
-      <span className={`status ${statusClass(c.status)}`}>{c.status || '検討中'}</span>
+      <select className={`status-select ${statusClass(c.status)}`} value={c.status || '検討中'} onChange={(e) => onStatus(e.target.value)}>
+        {STATUSES.map((s) => <option key={s}>{s}</option>)}
+      </select>
       <div className="tasks">
         {tasks.length === 0 && <div className="muted">締切タスクなし</div>}
         {tasks.map((t) => {
@@ -290,6 +391,7 @@ function CompanyCard({ c, onEdit, onDelete, onAddTask, onRemoveTask }) {
             <div key={t.id} className={`trow ${t.done ? 'done' : urgency(diff)}`}>
               <span className="tdot" />
               <span className="tlabel">{t.label}{t.date ? ` ${t.date.slice(5).replace('-', '/')}` : ''}</span>
+              {!t.done && <button className="tdone" onClick={() => onDoneTask(c, t.id)} title="完了にする">✓</button>}
               <span className="tcount">{t.done ? '完了' : (diff !== null ? n + u : '')}</span>
               <button className="tx" onClick={() => onRemoveTask(c, t.id)}>✕</button>
             </div>
@@ -314,26 +416,82 @@ function CompanyCard({ c, onEdit, onDelete, onAddTask, onRemoveTask }) {
   );
 }
 
-function CompanyModal({ form, setForm, onSave, onClose }) {
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+function CalendarView({ companies, onDone }) {
+  const today = new Date();
+  const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const byDate = {};
+  companies.forEach((c) => (c.tasks || []).forEach((t) => { if (t.date) (byDate[t.date] = byDate[t.date] || []).push({ ...t, co: c.name, cid: c.id }); }));
+
+  const first = new Date(cur.y, cur.m, 1);
+  const startDow = first.getDay();
+  const days = new Date(cur.y, cur.m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= days; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const ymd = (d) => `${cur.y}-${String(cur.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const shift = (n) => { let m = cur.m + n, y = cur.y; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } setCur({ y, m }); };
+
   return (
-    <div className="scrim" onClick={(e) => e.target.classList.contains('scrim') && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true">
-        <h2>{form.id ? '企業を編集' : '企業を追加'}</h2>
-        <div className="field"><label>企業名</label><input value={form.name} onChange={set('name')} autoFocus /></div>
-        <div className="field two">
-          <div><label>カテゴリ</label><select value={form.category || CATS[0]} onChange={set('category')}>{CATS.map((v) => <option key={v}>{v}</option>)}</select></div>
-          <div><label>志望度</label><select value={form.vote || 'B'} onChange={set('vote')}><option>A</option><option>B</option><option>C</option></select></div>
-        </div>
-        <div className="field"><label>選考ステータス</label><select value={form.status || '検討中'} onChange={set('status')}>{STATUSES.map((v) => <option key={v}>{v}</option>)}</select></div>
-        <div className="field"><label>マイページ URL</label><input value={form.mypage_url || ''} onChange={set('mypage_url')} placeholder="https://..." /></div>
-        <div className="field"><label>ES下書きリンク</label><input value={form.es_doc_url || ''} onChange={set('es_doc_url')} placeholder="https://..." /></div>
-        <div className="field"><label>メモ</label><textarea value={form.memo || ''} onChange={set('memo')} /></div>
-        <div className="modal-actions">
-          <button className="btn" onClick={onClose}>キャンセル</button>
-          <button className="btn primary" onClick={onSave}>保存</button>
-        </div>
+    <div className="cal">
+      <div className="cal-head">
+        <button className="btn" onClick={() => shift(-1)}>‹ 前月</button>
+        <strong>{cur.y}年 {cur.m + 1}月</strong>
+        <button className="btn" onClick={() => shift(1)}>翌月 ›</button>
+        <button className="btn" onClick={() => setCur({ y: today.getFullYear(), m: today.getMonth() })}>今日</button>
       </div>
+      <div className="cal-grid cal-dow">{WEEKDAYS.map((w, i) => <div key={w} className={`cal-dowcell ${i === 0 ? 'sun' : ''} ${i === 6 ? 'sat' : ''}`}>{w}</div>)}</div>
+      <div className="cal-grid">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} className="cal-cell empty" />;
+          const key = ymd(d);
+          const items = (byDate[key] || []).slice().sort((a, b) => Number(a.done) - Number(b.done));
+          const dow = (startDow + d - 1) % 7;
+          return (
+            <div key={i} className={`cal-cell ${key === todayStr ? 'today' : ''}`}>
+              <div className={`cal-day ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''}`}>{d}</div>
+              {items.map((t) => {
+                const diff = dayDiff(t.date);
+                return (
+                  <div key={t.id} className={`cal-chip ${t.done ? 'done' : urgency(diff)}`} title={`${t.co} ${t.label}`}
+                       onClick={() => !t.done && onDone(companies.find((c) => c.id === t.cid), t.id)}>
+                    <span className="cal-chip-co">{t.co}</span> {t.label}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <div className="muted" style={{ marginTop: 10 }}>チップをクリックすると完了にできます。色：<span className="legend over">超過</span> <span className="legend urgent">3日内</span> <span className="legend warn">7日内</span></div>
+    </div>
+  );
+}
+
+function KanbanView({ companies, onStatus }) {
+  const [drag, setDrag] = useState(null);
+  return (
+    <div className="kanban">
+      {STATUSES.map((s) => {
+        const cs = companies.filter((c) => (c.status || '検討中') === s);
+        return (
+          <div key={s} className={`kcol ${drag ? 'droppable' : ''}`}
+               onDragOver={(e) => e.preventDefault()}
+               onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData('id'); setDrag(null); if (id) onStatus(id, s); }}>
+            <div className={`kcol-h ${statusClass(s)}`}>{s}<span className="kcount">{cs.length}</span></div>
+            {cs.map((c) => (
+              <div key={c.id} className="kcard" draggable
+                   onDragStart={(e) => { e.dataTransfer.setData('id', c.id); setDrag(c.id); }}
+                   onDragEnd={() => setDrag(null)}>
+                <span className="kvote">{c.vote || '-'}</span>
+                <span className="kname">{c.name}</span>
+              </div>
+            ))}
+            {cs.length === 0 && <div className="kempty">—</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -395,6 +553,30 @@ function ESDraft({ draft, onSave, onRemove }) {
           <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => onSave(val)}>保存</button>
           <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onRemove}>削除</button>
         </span>
+      </div>
+    </div>
+  );
+}
+
+function CompanyModal({ form, setForm, onSave, onClose }) {
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  return (
+    <div className="scrim" onClick={(e) => e.target.classList.contains('scrim') && onClose()}>
+      <div className="modal" role="dialog" aria-modal="true">
+        <h2>{form.id ? '企業を編集' : '企業を追加'}</h2>
+        <div className="field"><label>企業名</label><input value={form.name} onChange={set('name')} autoFocus /></div>
+        <div className="field two">
+          <div><label>カテゴリ</label><select value={form.category || CATS[0]} onChange={set('category')}>{CATS.map((v) => <option key={v}>{v}</option>)}</select></div>
+          <div><label>志望度</label><select value={form.vote || 'B'} onChange={set('vote')}><option>A</option><option>B</option><option>C</option></select></div>
+        </div>
+        <div className="field"><label>選考ステータス</label><select value={form.status || '検討中'} onChange={set('status')}>{STATUSES.map((v) => <option key={v}>{v}</option>)}</select></div>
+        <div className="field"><label>マイページ URL</label><input value={form.mypage_url || ''} onChange={set('mypage_url')} placeholder="https://..." /></div>
+        <div className="field"><label>ES下書きリンク</label><input value={form.es_doc_url || ''} onChange={set('es_doc_url')} placeholder="https://..." /></div>
+        <div className="field"><label>メモ</label><textarea value={form.memo || ''} onChange={set('memo')} /></div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>キャンセル</button>
+          <button className="btn primary" onClick={onSave}>保存</button>
+        </div>
       </div>
     </div>
   );

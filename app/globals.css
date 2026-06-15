@@ -125,5 +125,71 @@ input,select,textarea{font-family:inherit}
 .logev{display:block;font-size:11px;color:var(--ink-soft);margin-top:1px}
 code{font-family:var(--mono);font-size:.9em;background:var(--line-soft);padding:1px 5px;border-radius:4px}
 
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;z-index:60}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;z-index:60;display:flex;align-items:center;gap:14px}
+.toast-action{background:none;border:none;color:#9DB2FF;font-weight:700;font-size:13px;padding:0}
+
+/* クイック追加・検索 */
+.quick-add{display:flex;gap:4px;align-items:center}
+.quick-add input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:12px;width:200px;color:var(--ink)}
+.quick-add .btn.primary{padding:7px 12px}
+.searchbox{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--ink);min-width:180px}
+
+/* ファネル統計 */
+.stats{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 24px}
+.statchip{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 12px;min-width:62px;transition:.15s}
+.statchip:hover:not(:disabled){border-color:var(--ink-soft)}
+.statchip:disabled{opacity:.4;cursor:default}
+.statchip.on{border-color:var(--primary);background:var(--primary-soft)}
+.statchip .statn{font-family:var(--mono);font-size:18px;font-weight:700;line-height:1}
+.statchip .stats-label{font-size:10px;color:var(--ink-soft)}
+.statchip.live .statn{color:var(--primary)} .statchip.win .statn{color:var(--calm)} .statchip.lose .statn{color:var(--done)}
+
+/* カード: チェックボックス・インラインステータス */
+.card.sel{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-soft),var(--shadow)}
+.row1-left{display:flex;align-items:flex-start;gap:9px}
+.card-check{margin-top:3px;width:15px;height:15px;accent-color:var(--primary);cursor:pointer;flex:0 0 auto}
+.status-select{width:fit-content;font-size:11px;font-weight:600;padding:3px 26px 3px 9px;border-radius:99px;border:1px solid var(--line);background:var(--line-soft);color:var(--ink-soft);cursor:pointer}
+.status-select.live{background:var(--primary-soft);color:var(--primary);border-color:transparent}
+.status-select.win{background:#E5F3EC;color:var(--calm);border-color:transparent}
+.status-select.lose{background:#F4ECEC;color:var(--urgent);border-color:transparent}
+.trow .tdone{border:none;background:none;color:var(--calm);padding:0 2px;font-size:12px}
+
+/* 一括操作バー */
+.bulkbar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 12px 8px 18px;border-radius:99px;font-size:13px;z-index:61;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.bulkbar .btn{padding:6px 12px;font-size:12px}
+.bulkbar .btn.danger{background:var(--urgent);color:#fff;border-color:var(--urgent)}
+
+/* カレンダー */
+.cal-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.cal-head strong{font-size:16px;min-width:120px;text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal-dow{margin-bottom:6px}
+.cal-dowcell{text-align:center;font-size:11px;color:var(--ink-soft);font-weight:700;padding:4px 0}
+.cal-dowcell.sun{color:var(--urgent)} .cal-dowcell.sat{color:var(--primary)}
+.cal-cell{min-height:92px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:3px}
+.cal-cell.empty{background:transparent;border:none}
+.cal-cell.today{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.cal-day{font-size:12px;font-family:var(--mono);color:var(--ink-soft);font-weight:700}
+.cal-day.sun{color:var(--urgent)} .cal-day.sat{color:var(--primary)}
+.cal-chip{font-size:10.5px;line-height:1.35;padding:2px 5px;border-radius:5px;background:var(--line-soft);color:var(--ink);cursor:pointer;border-left:3px solid var(--calm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-chip.warn{border-left-color:var(--warn)} .cal-chip.urgent{border-left-color:var(--urgent)} .cal-chip.over{border-left-color:var(--done);opacity:.6;text-decoration:line-through}
+.cal-chip.done{opacity:.5;text-decoration:line-through}
+.cal-chip-co{color:var(--ink-soft)}
+.legend{display:inline-block;padding:1px 7px;border-radius:5px;margin:0 2px;border-left:3px solid var(--calm)}
+.legend.warn{border-left-color:var(--warn)} .legend.urgent{border-left-color:var(--urgent)} .legend.over{border-left-color:var(--done)}
+
+/* カンバン */
+.kanban{display:flex;gap:10px;overflow-x:auto;padding-bottom:10px}
+.kcol{flex:0 0 168px;background:var(--line-soft);border-radius:10px;padding:8px;min-height:140px;display:flex;flex-direction:column;gap:7px}
+.kcol.droppable{outline:2px dashed var(--line)}
+.kcol-h{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;color:var(--ink-soft);padding:2px 4px}
+.kcol-h.live{color:var(--primary)} .kcol-h.win{color:var(--calm)} .kcol-h.lose{color:var(--done)}
+.kcount{font-family:var(--mono);background:var(--surface);border-radius:99px;padding:0 7px;font-size:11px}
+.kcard{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 9px;font-size:12.5px;cursor:grab;box-shadow:var(--shadow)}
+.kcard:active{cursor:grabbing}
+.kname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kvote{font-family:var(--mono);font-size:10px;font-weight:700;background:var(--primary-soft);color:var(--primary);border-radius:5px;padding:1px 5px;flex:0 0 auto}
+.kempty{font-size:11px;color:var(--done);text-align:center;padding:8px 0}
+@media (max-width:560px){.cal-cell{min-height:64px}.quick-add input{width:130px}}
+
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

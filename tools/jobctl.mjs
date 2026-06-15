@@ -4,6 +4,7 @@
 //
 // 使い方:
 //   node tools/jobctl.mjs list                          全企業を JSON で一覧
+//   node tools/jobctl.mjs tasks [--all]                 締切タスクをフラット出力（カレンダー同期用）
 //   node tools/jobctl.mjs find "<部分一致>"             企業を名前で検索（id を得る）
 //   node tools/jobctl.mjs status <id|名前> "<状態>" [--source gmail --evidence "件名…"]
 //   node tools/jobctl.mjs add-task <id|名前> "<ラベル>" <YYYY-MM-DD> [--source gmail --evidence "…"]
@@ -51,6 +52,20 @@ async function resolve(ref) {
 try {
   if (cmd === 'list') {
     console.log(JSON.stringify(await getCompanies(), null, 2));
+
+  } else if (cmd === 'tasks') {
+    // 全締切タスクをフラットに JSON 出力（Googleカレンダー同期プレイブック用）。
+    // 既定は未完了のみ。--all で完了も含む。
+    const all = argv.includes('--all');
+    const cs = await getCompanies();
+    const out = [];
+    for (const c of cs) for (const t of (c.tasks || [])) {
+      if (!t.date) continue;
+      if (!all && t.done) continue;
+      out.push({ company: c.name, company_id: c.id, task_id: t.id, label: t.label, date: t.date, done: !!t.done, title: `【就活】${c.name}｜${t.label}` });
+    }
+    out.sort((a, b) => a.date.localeCompare(b.date));
+    console.log(JSON.stringify(out, null, 2));
 
   } else if (cmd === 'find') {
     const cs = await getCompanies();
