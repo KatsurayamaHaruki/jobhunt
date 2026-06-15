@@ -28,17 +28,30 @@ export default function Login() {
     else setSent(true);
   }
 
+  async function google() {
+    setErr('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+    });
+    if (error) setErr(error.message);
+  }
+
   return (
     <div className="login-wrap">
       <div className="login-card">
         <h1>就活ポータル</h1>
-        <p>メールアドレスにログイン用リンクを送ります。</p>
+        <p>Googleアカウントでそのままログインできます。</p>
         {sent ? (
           <p style={{ color: 'var(--calm)' }}>
             {email} にリンクを送りました。メール内のリンクを開くとログインされます。
           </p>
         ) : (
           <>
+            <button className="btn google" style={{ width: '100%' }} onClick={google}>
+              <span className="g-icon">G</span> Googleでログイン
+            </button>
+            <div className="or-divider"><span>または メールでログイン</span></div>
             <div className="field">
               <label>メールアドレス</label>
               <input

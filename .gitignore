@@ -4,3 +4,9 @@ node_modules
 .env
 .DS_Store
 *.log
+
+# 自動入力の生成物は個人情報（氏名・電話・住所等）を含む。
+# 公開ディレクトリ public/ に置くが、Git／Vercel には絶対に上げない。ローカルで生成して使う。
+public/jobhunt-autofill.user.js
+public/jobhunt-autofill-bookmarklet.txt
+public/jobhunt-autofill-dict.json
