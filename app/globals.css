@@ -134,6 +134,10 @@ input,select,textarea{font-family:inherit}
 .ai-guide h3{margin:0 0 8px;font-size:14px;color:var(--primary)}
 .ai-guide ol{margin:0;padding-left:20px;font-size:12.5px;line-height:1.8;color:var(--ink)}
 .ai-guide li{margin-bottom:3px}
+.prompt-tmpl{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.prompt-tmpl-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;font-size:12px;font-weight:600;color:var(--ink-soft);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.prompt-tmpl-head .btn{padding:4px 12px;font-size:12px}
+.prompt-tmpl-body{margin:0;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--ink);overflow-x:auto}
 .docs-status{font-size:12px;margin-left:10px}
 .docs-status.set{color:var(--calm)} .docs-status.unset{color:var(--warn)}
 

@@ -16,6 +16,16 @@ function urgency(x) { if (x === null) return ''; if (x < 0) return 'over'; if (x
 function countText(x) { if (x === null) return ['—', '']; if (x < 0) return [String(-x), '日超過']; if (x === 0) return ['今日', '']; return [String(x), '日後']; }
 function statusClass(s) { if (s === '内定') return 'win'; if (s === '見送り') return 'lose'; if (LIVE.has(s)) return 'live'; return ''; }
 const blank = { name: '', category: CATS[0], vote: 'B', status: '検討中', mypage_url: '', es_doc_url: '', login_id: '', links: [], memo: '' };
+
+// ブラウザ版Claudeに貼るES作成プロンプト雛形（どの端末からもここでコピーできる）
+const PROMPT_TEMPLATE = `就活ポータル(https://job-hunt-pi-orpin.vercel.app/)の「資料」タブ先頭「AIへの作業指示」に従ってES下書きを作って。
+
+対象企業: 〈社名〉
+ESページ（このブラウザで開いている）: 〈URL〉
+コース/インターン内容: 〈分かれば。志望動機をここに寄せる〉
+特記事項: 〈あれば〉
+
+まず、開いているESページから設問と文字数上限を一覧化して見せて。その後に下書きへ進んで。`;
 // 締切タスクの日時表示。時刻未設定（=23:59）は日付のみ、明示時刻のときだけ時刻を出す。
 function fmtWhen(t) {
   if (!t.date) return '';
@@ -313,11 +323,18 @@ export default function Portal() {
             <ol>
               <li>開いている対象企業のESページから、<strong>設問と文字数上限</strong>を漏れなく一覧化する（上限不明ならユーザーに確認、推測しない）。</li>
               <li>このページ下の<strong>自己分析マスター資料・基本プロフィール</strong>を事実の根拠にする。「ES作成→設問別」で<strong>過去ESを探し、似た設問は流用</strong>（作り直さない＝トークン節約）。</li>
-              <li>下書きのルール：<strong>だ・である調／結論先行(PREP・STAR)／字数は上限の約9割・超過禁止／資料の事実のみ・無ければ[要確認]／空疎な美辞麗句を避け具体定量／専門用語に短い補足／本文のみ出力</strong>。字数はコードポイント数で数える。</li>
+              <li>下書きのルール：<strong>だ・である調／結論先行(PREP・STAR)／字数は上限ギリギリを目標・難しくても最低90%超・超過禁止／資料の事実のみ・無ければ[要確認]／空疎な美辞麗句を避け具体定量／専門用語に短い補足／本文のみ出力</strong>。字数はコードポイント数で数える。</li>
               <li>各設問の本文と字数を提示し、<strong>ユーザーの確認を待つ</strong>。</li>
               <li>確認後、<strong>「ES作成→企業別→対象社→＋ESを追加」</strong>で設問・上限・本文を保存。企業が無ければダッシュボード上部で追加。</li>
               <li>最後に対象企業の<strong>ステータス</strong>を実態に更新し、分かる<strong>締切</strong>を登録。提出ボタンは人間が押す。</li>
             </ol>
+            <div className="prompt-tmpl">
+              <div className="prompt-tmpl-head">
+                <span>📋 ES作成プロンプト（ブラウザ版Claudeに貼る・どの端末でもここでコピー）</span>
+                <button className="btn" onClick={() => { navigator.clipboard?.writeText(PROMPT_TEMPLATE); showToast('プロンプトをコピーしました'); }}>コピー</button>
+              </div>
+              <pre className="prompt-tmpl-body">{PROMPT_TEMPLATE}</pre>
+            </div>
           </div>
           <div className="note">ここに置いた資料は、ES作成の根拠として参照されます。<strong>パスワード等の秘密情報は入れないでください。</strong></div>
           <div className="es-card" style={{ marginBottom: 16 }}>
@@ -651,8 +668,8 @@ function ESAddForm({ onAdd }) {
   const [limit, setLimit] = useState(400);
   const [text, setText] = useState('');
   const len = jpLen(text);
-  const target = limit ? Math.round(limit * 0.9) : 0;
-  const cls = limit && len > limit ? 'hi' : (limit && len / limit >= 0.85 ? 'ok' : 'lo');
+  const min90 = limit ? Math.ceil(limit * 0.9) : 0;
+  const cls = limit && len > limit ? 'hi' : (limit && len >= min90 ? 'ok' : 'lo');
 
   if (!open) return <button className="btn primary" style={{ marginBottom: 16 }} onClick={() => setOpen(true)}>＋ ESを追加</button>;
   return (
@@ -662,7 +679,7 @@ function ESAddForm({ onAdd }) {
       <div className="field"><label>文字数上限</label><input type="number" min="1" value={limit} onChange={(e) => setLimit(+e.target.value)} /></div>
       <div className="field"><label>本文</label><textarea className="es-out" value={text} onChange={(e) => setText(e.target.value)} placeholder="ES本文を貼り付け／入力" /></div>
       <div className="charbar">
-        <span><span className={cls}>{len}</span>{limit ? ` / ${limit}（目標 ${target}）` : '字'}</span>
+        <span><span className={cls}>{len}</span>{limit ? ` / ${limit}（上限ギリギリ目標・最低 ${min90}）` : '字'}</span>
         <span style={{ display: 'flex', gap: 8 }}>
           <button className="btn" onClick={() => setOpen(false)}>閉じる</button>
           <button className="btn primary" onClick={() => { if (!text.trim()) return; onAdd({ question: question.trim(), limit: Number(limit) || 0, text }); setQuestion(''); setText(''); setOpen(false); }}>保存</button>
@@ -715,14 +732,14 @@ function ESDraft({ draft, onSave, onRemove }) {
   const [val, setVal] = useState(draft.text || '');
   const limit = draft.limit || 0;
   const len = jpLen(val);
-  const target = limit ? Math.round(limit * 0.9) : 0;
-  const cls = limit && len > limit ? 'hi' : (limit && len / limit >= 0.85 ? 'ok' : 'lo');
+  const min90 = limit ? Math.ceil(limit * 0.9) : 0;
+  const cls = limit && len > limit ? 'hi' : (limit && len >= min90 ? 'ok' : 'lo');
   return (
     <div className="es-card" style={{ marginBottom: 14 }}>
       <h3 style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{draft.question || '（設問未記録）'}</h3>
       <textarea className="es-out" value={val} onChange={(e) => setVal(e.target.value)} />
       <div className="charbar">
-        <span>{limit ? <><span className={cls}>{len}</span> / {limit}（目標 {target}）</> : `${len}字`}{draft.savedAt ? ` ・ ${new Date(draft.savedAt).toLocaleDateString('ja-JP')}` : ''}</span>
+        <span>{limit ? <><span className={cls}>{len}</span> / {limit}（上限ギリギリ目標・最低 {min90}）</> : `${len}字`}{draft.savedAt ? ` ・ ${new Date(draft.savedAt).toLocaleDateString('ja-JP')}` : ''}</span>
         <span style={{ display: 'flex', gap: 8 }}>
           <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => onSave(val)}>保存</button>
           <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onRemove}>削除</button>
