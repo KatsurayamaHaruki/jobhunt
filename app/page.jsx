@@ -14,7 +14,13 @@ function dayDiff(d) { if (!d) return null; const t = new Date(); t.setHours(0, 0
 function urgency(x) { if (x === null) return ''; if (x < 0) return 'over'; if (x <= 3) return 'urgent'; if (x <= 7) return 'warn'; return ''; }
 function countText(x) { if (x === null) return ['—', '']; if (x < 0) return [String(-x), '日超過']; if (x === 0) return ['今日', '']; return [String(x), '日後']; }
 function statusClass(s) { if (s === '内定') return 'win'; if (s === '見送り') return 'lose'; if (LIVE.has(s)) return 'live'; return ''; }
-const blank = { name: '', category: CATS[0], vote: 'B', status: '検討中', mypage_url: '', es_doc_url: '', memo: '' };
+const blank = { name: '', category: CATS[0], vote: 'B', status: '検討中', mypage_url: '', es_doc_url: '', login_id: '', links: [], memo: '' };
+// 締切タスクの日時表示（time は任意）
+function fmtWhen(t) {
+  if (!t.date) return '';
+  const md = t.date.slice(5).replace('-', '/');
+  return t.time ? `${md} ${t.time}` : md;
+}
 
 export default function Portal() {
   const router = useRouter();
@@ -126,9 +132,11 @@ export default function Portal() {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  function addTask(c, label, date) {
+  function addTask(c, label, date, time) {
     if (!date) { showToast('日付を選んで'); return; }
-    patchCompany(c.id, { tasks: [...(c.tasks || []), { id: crypto.randomUUID(), label, date, done: false }] });
+    const task = { id: crypto.randomUUID(), label, date, done: false };
+    if (time) task.time = time;
+    patchCompany(c.id, { tasks: [...(c.tasks || []), task] });
   }
   function removeTask(c, tid) { patchCompany(c.id, { tasks: (c.tasks || []).filter((t) => t.id !== tid) }); }
   // 完了 ↔ 未完了 をトグル（誤クリックしても再クリックで戻せる）
@@ -163,6 +171,8 @@ export default function Portal() {
           status: c.status || '検討中',
           mypage_url: c.mypage_url ?? c.mypageUrl ?? null,
           es_doc_url: c.es_doc_url ?? c.esDocUrl ?? null,
+          login_id: c.login_id ?? c.loginId ?? null,
+          links: c.links || [],
           memo: c.memo || null,
           tasks: c.tasks || [],
           es_drafts: c.es_drafts ?? c.esDrafts ?? [],
@@ -371,6 +381,7 @@ function FunnelStats({ companies, onPick, active }) {
 function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onToggleTask }) {
   const [label, setLabel] = useState(TASK_LABELS[0]);
   const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const listId = `tasklabels-${c.id}`;
   const tasks = (c.tasks || []).slice().sort((a, b) => (a.date || '9').localeCompare(b.date || '9'));
   return (
@@ -392,7 +403,7 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
           return (
             <div key={t.id} className={`trow ${t.done ? 'done' : urgency(diff)}`}>
               <span className="tdot" />
-              <span className="tlabel">{t.label}{t.date ? ` ${t.date.slice(5).replace('-', '/')}` : ''}</span>
+              <span className="tlabel">{t.label}{t.date ? ` ${fmtWhen(t)}` : ''}</span>
               <button className="tdone" onClick={() => onToggleTask(c, t.id)} title={t.done ? '未完了に戻す' : '完了にする'}>{t.done ? '↩' : '✓'}</button>
               <span className="tcount">{t.done ? '完了' : (diff !== null ? n + u : '')}</span>
               <button className="tx" onClick={() => onRemoveTask(c, t.id)}>✕</button>
@@ -404,12 +415,21 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
         <input type="text" list={listId} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="種別（自由入力可）" />
         <datalist id={listId}>{TASK_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => { if (!label.trim()) return; onAddTask(c, label.trim(), date); setDate(''); }}>＋</button>
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="時刻（任意）" />
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => { if (!label.trim()) return; onAddTask(c, label.trim(), date, time); setDate(''); setTime(''); }}>＋</button>
       </div>
-      {(c.mypage_url || c.es_doc_url) && (
+      {(c.mypage_url || c.es_doc_url || (c.links || []).length > 0) && (
         <div className="links">
           {c.mypage_url && <a href={c.mypage_url} target="_blank" rel="noopener noreferrer">マイページ ↗</a>}
           {c.es_doc_url && <a href={c.es_doc_url} target="_blank" rel="noopener noreferrer">ES下書き ↗</a>}
+          {(c.links || []).map((l, i) => l.url && <a key={i} href={l.url} target="_blank" rel="noopener noreferrer">{l.label || 'リンク'} ↗</a>)}
+        </div>
+      )}
+      {c.login_id && (
+        <div className="login-id">
+          <span className="li-key">ID</span>
+          <span className="li-val">{c.login_id}</span>
+          <button className="li-copy" title="コピー" onClick={() => { navigator.clipboard?.writeText(c.login_id); }}>⧉</button>
         </div>
       )}
       {(c.es_drafts || []).length > 0 && <div className="es-tag">保存済みES {(c.es_drafts || []).length}件</div>}
@@ -459,7 +479,7 @@ function CalendarView({ companies, onToggle }) {
                 return (
                   <div key={t.id} className={`cal-chip ${t.done ? 'done' : urgency(diff)}`} title={`${t.co} ${t.label}（クリックで完了/未完了）`}
                        onClick={() => onToggle(companies.find((c) => c.id === t.cid), t.id)}>
-                    <span className="cal-chip-co">{t.co}</span> {t.label}
+                    {t.time && <span className="cal-chip-time">{t.time}</span>}<span className="cal-chip-co">{t.co}</span> {t.label}
                   </div>
                 );
               })}
@@ -563,6 +583,10 @@ function ESDraft({ draft, onSave, onRemove }) {
 
 function CompanyModal({ form, setForm, onSave, onClose }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const links = form.links || [];
+  const setLink = (i, k, v) => setForm({ ...form, links: links.map((l, j) => (j === i ? { ...l, [k]: v } : l)) });
+  const addLink = () => setForm({ ...form, links: [...links, { label: '', url: '' }] });
+  const removeLink = (i) => setForm({ ...form, links: links.filter((_, j) => j !== i) });
   return (
     <div className="scrim" onClick={(e) => e.target.classList.contains('scrim') && onClose()}>
       <div className="modal" role="dialog" aria-modal="true">
@@ -575,6 +599,21 @@ function CompanyModal({ form, setForm, onSave, onClose }) {
         <div className="field"><label>選考ステータス</label><select value={form.status || '検討中'} onChange={set('status')}>{STATUSES.map((v) => <option key={v}>{v}</option>)}</select></div>
         <div className="field"><label>マイページ URL</label><input value={form.mypage_url || ''} onChange={set('mypage_url')} placeholder="https://..." /></div>
         <div className="field"><label>ES下書きリンク</label><input value={form.es_doc_url || ''} onChange={set('es_doc_url')} placeholder="https://..." /></div>
+        <div className="field">
+          <label>ログインID（パスワードは入れない）</label>
+          <input value={form.login_id || ''} onChange={set('login_id')} placeholder="例: katsurayamajob@gmail.com / 会員番号など" />
+        </div>
+        <div className="field">
+          <label>任意リンク（見返したいページなど）</label>
+          {links.map((l, i) => (
+            <div className="link-row" key={i}>
+              <input value={l.label || ''} onChange={(e) => setLink(i, 'label', e.target.value)} placeholder="ラベル（例: 説明会資料）" />
+              <input value={l.url || ''} onChange={(e) => setLink(i, 'url', e.target.value)} placeholder="https://..." />
+              <button className="btn" type="button" onClick={() => removeLink(i)}>✕</button>
+            </div>
+          ))}
+          <button className="btn" type="button" onClick={addLink} style={{ fontSize: 12, padding: '5px 10px' }}>＋ リンクを追加</button>
+        </div>
         <div className="field"><label>メモ</label><textarea value={form.memo || ''} onChange={set('memo')} /></div>
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>キャンセル</button>

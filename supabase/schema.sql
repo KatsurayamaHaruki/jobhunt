@@ -19,6 +19,10 @@ create table if not exists public.companies (
   created_at  timestamptz not null default now()
 );
 
+-- 追加カラム（既存テーブルにも後から足せるよう idempotent に）
+alter table public.companies add column if not exists login_id text;            -- 各社のログインID等のメモ（パスワードは入れない）
+alter table public.companies add column if not exists links jsonb not null default '[]'::jsonb;  -- 任意リンク [{label,url}]
+
 alter table public.companies enable row level security;
 
 drop policy if exists "own companies" on public.companies;

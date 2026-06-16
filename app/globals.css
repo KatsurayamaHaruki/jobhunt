@@ -72,9 +72,25 @@ input,select,textarea{font-family:inherit}
 .card .actions{display:flex;gap:10px;margin-top:2px}
 .card .actions button{font-size:11.5px;border:none;background:none;color:var(--ink-soft);padding:0}
 .card .actions button:hover{color:var(--ink)}
-.add-task-mini{display:flex;gap:6px;margin-top:2px}
+.add-task-mini{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap}
 .add-task-mini input,.add-task-mini select{font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:6px}
-.add-task-mini input[type=text]{flex:1;min-width:0}
+.add-task-mini input[type=text]{flex:1;min-width:70px}
+.add-task-mini input[type=date]{flex:1;min-width:0}
+.add-task-mini input[type=time]{width:84px}
+
+/* ログインIDメモ */
+.login-id{display:flex;align-items:center;gap:7px;font-size:12px}
+.login-id .li-key{font-size:10px;font-weight:700;color:var(--ink-soft);background:var(--line-soft);border-radius:5px;padding:1px 6px}
+.login-id .li-val{font-family:var(--mono);font-size:11.5px;color:var(--ink);word-break:break-all;flex:1}
+.login-id .li-copy{border:none;background:none;color:var(--ink-soft);font-size:14px;padding:0 2px}
+.login-id .li-copy:hover{color:var(--primary)}
+
+/* モーダルのリンク編集 */
+.link-row{display:flex;gap:6px;margin-bottom:6px}
+.link-row input:first-child{flex:0 0 38%}
+.link-row input{min-width:0}
+.link-row .btn{padding:6px 9px;font-size:12px}
+.cal-chip-time{font-family:var(--mono);font-weight:700;margin-right:3px}
 .emptystate{text-align:center;color:var(--ink-soft);padding:50px 20px;border:1px dashed var(--line);border-radius:var(--radius)}
 
 .scrim{position:fixed;inset:0;background:rgba(26,29,36,.4);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50}

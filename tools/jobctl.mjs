@@ -7,7 +7,7 @@
 //   node tools/jobctl.mjs tasks [--all]                 締切タスクをフラット出力（カレンダー同期用）
 //   node tools/jobctl.mjs find "<部分一致>"             企業を名前で検索（id を得る）
 //   node tools/jobctl.mjs status <id|名前> "<状態>" [--source gmail --evidence "件名…"]
-//   node tools/jobctl.mjs add-task <id|名前> "<ラベル>" <YYYY-MM-DD> [--source gmail --evidence "…"]
+//   node tools/jobctl.mjs add-task <id|名前> "<ラベル>" <YYYY-MM-DD> [--time HH:MM --source gmail --evidence "…"]
 //   node tools/jobctl.mjs add-company "<企業名>" [--category … --vote B --status 検討中]
 //   node tools/jobctl.mjs save-es <id|名前> "<設問>" <文字数上限> --text-file <path> [--source es]
 //   node tools/jobctl.mjs log [N]                       直近 N 件の変更履歴
@@ -62,7 +62,7 @@ try {
     for (const c of cs) for (const t of (c.tasks || [])) {
       if (!t.date) continue;
       if (!all && t.done) continue;
-      out.push({ company: c.name, company_id: c.id, task_id: t.id, label: t.label, date: t.date, done: !!t.done, title: `【就活】${c.name}｜${t.label}` });
+      out.push({ company: c.name, company_id: c.id, task_id: t.id, label: t.label, date: t.date, time: t.time || null, done: !!t.done, title: `【就活】${c.name}｜${t.label}` });
     }
     out.sort((a, b) => a.date.localeCompare(b.date));
     console.log(JSON.stringify(out, null, 2));
@@ -88,13 +88,16 @@ try {
     const c = await resolve(pos[0]);
     const label = pos[1]; const date = pos[2];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('日付は YYYY-MM-DD');
+    if (o.time && !/^\d{2}:\d{2}$/.test(o.time)) throw new Error('時刻は HH:MM');
     const tasks = c.tasks || [];
     if (tasks.some((t) => t.label === label && t.date === date)) { console.log(`= 重複スキップ: ${c.name} ${label} ${date}`); process.exit(0); }
     const task = { id: cryptoId(), label, date, done: false };
+    if (o.time) task.time = o.time;
+    const when = `${date}${o.time ? ' ' + o.time : ''}`;
     const { error } = await db.from('companies').update({ tasks: [...tasks, task] }).eq('id', c.id);
     if (error) throw error;
-    await logChange(db, { companyId: c.id, companyName: c.name, field: 'task', newValue: `${label} ${date}`, source: o.source || 'manual', evidence: o.evidence });
-    console.log(`✓ ${c.name}: 締切追加「${label} ${date}」`);
+    await logChange(db, { companyId: c.id, companyName: c.name, field: 'task', newValue: `${label} ${when}`, source: o.source || 'manual', evidence: o.evidence });
+    console.log(`✓ ${c.name}: 締切追加「${label} ${when}」`);
 
   } else if (cmd === 'add-company') {
     const { o, pos } = opts(argv.slice(1));
