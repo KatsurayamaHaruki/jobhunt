@@ -308,7 +308,18 @@ export default function Portal() {
 
       {tab === 'docs' && (
         <>
-          <div className="note">ここに置いた資料は、ES生成時の文脈として渡されます。<strong>パスワード等の秘密情報は入れないでください。</strong></div>
+          <div className="ai-guide">
+            <h3>🤖 AIへの作業指示（ブラウザ版Claude向け／ESを作るとき）</h3>
+            <ol>
+              <li>開いている対象企業のESページから、<strong>設問と文字数上限</strong>を漏れなく一覧化する（上限不明ならユーザーに確認、推測しない）。</li>
+              <li>このページ下の<strong>自己分析マスター資料・基本プロフィール</strong>を事実の根拠にする。「ES作成→設問別」で<strong>過去ESを探し、似た設問は流用</strong>（作り直さない＝トークン節約）。</li>
+              <li>下書きのルール：<strong>だ・である調／結論先行(PREP・STAR)／字数は上限の約9割・超過禁止／資料の事実のみ・無ければ[要確認]／空疎な美辞麗句を避け具体定量／専門用語に短い補足／本文のみ出力</strong>。字数はコードポイント数で数える。</li>
+              <li>各設問の本文と字数を提示し、<strong>ユーザーの確認を待つ</strong>。</li>
+              <li>確認後、<strong>「ES作成→企業別→対象社→＋ESを追加」</strong>で設問・上限・本文を保存。企業が無ければダッシュボード上部で追加。</li>
+              <li>最後に対象企業の<strong>ステータス</strong>を実態に更新し、分かる<strong>締切</strong>を登録。提出ボタンは人間が押す。</li>
+            </ol>
+          </div>
+          <div className="note">ここに置いた資料は、ES作成の根拠として参照されます。<strong>パスワード等の秘密情報は入れないでください。</strong></div>
           <div className="es-card" style={{ marginBottom: 16 }}>
             <h3>自己分析マスター資料</h3>
             <textarea className="es-out" style={{ minHeight: 200 }} value={docs.master_doc} onChange={(e) => setDocs({ ...docs, master_doc: e.target.value })} placeholder="自己分析マスター資料の本文を貼り付け" />
