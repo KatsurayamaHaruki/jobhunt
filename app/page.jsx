@@ -7,6 +7,7 @@ const CATS = ['大手SIer', '金融IT子会社', 'AI・Web系', '事業会社（
 const STATUSES = ['検討中', 'エントリー済', 'ES提出', 'Webテスト', '一次面接', '二次面接', '最終面接', '内定', '見送り'];
 const LIVE = new Set(['エントリー済', 'ES提出', 'Webテスト', '一次面接', '二次面接', '最終面接']);
 const TASK_LABELS = ['ES締切', 'Webテスト', '説明会', '一次面接', '二次面接', '最終面接', '面談'];
+const OTHER_LABEL = 'その他（自由入力）';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 const jpLen = (s) => [...(s || '')].length;
@@ -380,9 +381,9 @@ function FunnelStats({ companies, onPick, active }) {
 
 function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onToggleTask }) {
   const [label, setLabel] = useState(TASK_LABELS[0]);
+  const [custom, setCustom] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
-  const listId = `tasklabels-${c.id}`;
   const tasks = (c.tasks || []).slice().sort((a, b) => (a.date || '9').localeCompare(b.date || '9'));
   return (
     <div className={`card ${selected ? 'sel' : ''}`}>
@@ -412,11 +413,19 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
         })}
       </div>
       <div className="add-task-mini">
-        <input type="text" list={listId} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="種別（自由入力可）" />
-        <datalist id={listId}>{TASK_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
+        <select value={label} onChange={(e) => setLabel(e.target.value)}>
+          {TASK_LABELS.map((l) => <option key={l}>{l}</option>)}
+          <option value={OTHER_LABEL}>{OTHER_LABEL}</option>
+        </select>
+        {label === OTHER_LABEL && <input type="text" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="種別を入力" autoFocus />}
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="時刻（任意）" />
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => { if (!label.trim()) return; onAddTask(c, label.trim(), date, time); setDate(''); setTime(''); }}>＋</button>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => {
+          const lab = label === OTHER_LABEL ? custom.trim() : label;
+          if (!lab) return;
+          onAddTask(c, lab, date, time);
+          setDate(''); setTime(''); setCustom(''); if (label === OTHER_LABEL) setLabel(TASK_LABELS[0]);
+        }}>＋</button>
       </div>
       {(c.mypage_url || c.es_doc_url || (c.links || []).length > 0) && (
         <div className="links">
