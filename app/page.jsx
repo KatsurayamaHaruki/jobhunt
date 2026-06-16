@@ -621,12 +621,43 @@ function ESByCompany({ companies, onSaveDrafts, showToast }) {
       </div>
       {!companyId ? (
         <div className="emptystate">企業を選ぶと、保存済みのES下書きが表示されます。</div>
-      ) : drafts.length === 0 ? (
-        <div className="emptystate">{co.name} の保存済みESはまだありません。Claude Code で生成すると、ここに入ります。</div>
       ) : (
-        drafts.map((d, i) => <ESDraft key={d.id || i} draft={d} onSave={(t) => updateDraft(i, t)} onRemove={() => removeDraft(i)} />)
+        <>
+          <ESAddForm onAdd={(d) => { onSaveDrafts(companyId, [{ id: crypto.randomUUID(), ...d, savedAt: new Date().toISOString() }, ...drafts]); showToast('ESを保存しました'); }} />
+          {drafts.length === 0
+            ? <div className="emptystate">{co.name} の保存済みESはまだありません。上の「＋ ESを追加」、または Claude Code で生成すると入ります。</div>
+            : drafts.map((d, i) => <ESDraft key={d.id || i} draft={d} onSave={(t) => updateDraft(i, t)} onRemove={() => removeDraft(i)} />)}
+        </>
       )}
     </>
+  );
+}
+
+// ブラウザ（Claudeアプリ等）や手作業から、ES下書きを直接ポータルに保存するための入力フォーム
+function ESAddForm({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [limit, setLimit] = useState(400);
+  const [text, setText] = useState('');
+  const len = jpLen(text);
+  const target = limit ? Math.round(limit * 0.9) : 0;
+  const cls = limit && len > limit ? 'hi' : (limit && len / limit >= 0.85 ? 'ok' : 'lo');
+
+  if (!open) return <button className="btn primary" style={{ marginBottom: 16 }} onClick={() => setOpen(true)}>＋ ESを追加</button>;
+  return (
+    <div className="es-card" style={{ marginBottom: 16 }}>
+      <h3>ESを追加</h3>
+      <div className="field"><label>設問</label><textarea style={{ minHeight: 60 }} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="設問文をそのまま貼り付け" /></div>
+      <div className="field"><label>文字数上限</label><input type="number" min="1" value={limit} onChange={(e) => setLimit(+e.target.value)} /></div>
+      <div className="field"><label>本文</label><textarea className="es-out" value={text} onChange={(e) => setText(e.target.value)} placeholder="ES本文を貼り付け／入力" /></div>
+      <div className="charbar">
+        <span><span className={cls}>{len}</span>{limit ? ` / ${limit}（目標 ${target}）` : '字'}</span>
+        <span style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" onClick={() => setOpen(false)}>閉じる</button>
+          <button className="btn primary" onClick={() => { if (!text.trim()) return; onAdd({ question: question.trim(), limit: Number(limit) || 0, text }); setQuestion(''); setText(''); setOpen(false); }}>保存</button>
+        </span>
+      </div>
+    </div>
   );
 }
 
