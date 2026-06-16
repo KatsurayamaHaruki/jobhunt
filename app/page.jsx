@@ -131,7 +131,8 @@ export default function Portal() {
     patchCompany(c.id, { tasks: [...(c.tasks || []), { id: crypto.randomUUID(), label, date, done: false }] });
   }
   function removeTask(c, tid) { patchCompany(c.id, { tasks: (c.tasks || []).filter((t) => t.id !== tid) }); }
-  function doneTask(c, tid) { patchCompany(c.id, { tasks: (c.tasks || []).map((t) => (t.id === tid ? { ...t, done: true } : t)) }); }
+  // 完了 ↔ 未完了 をトグル（誤クリックしても再クリックで戻せる）
+  function toggleTask(c, tid) { patchCompany(c.id, { tasks: (c.tasks || []).map((t) => (t.id === tid ? { ...t, done: !t.done } : t)) }); }
 
   async function saveDocs() {
     const { error } = await supabase.from('user_docs').upsert({ user_id: session.user.id, master_doc: docs.master_doc, profile: docs.profile, updated_at: new Date().toISOString() });
@@ -246,7 +247,7 @@ export default function Portal() {
                     <div className="task">{t.label}</div>
                     <div className="count"><span className="n">{n}</span><span className="u">{u}</span></div>
                     <div className="date">{new Date(t.date + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}</div>
-                    <button className="linkbtn" onClick={() => doneTask(companies.find((c) => c.id === t.cid), t.id)}>完了にする</button>
+                    <button className="linkbtn" onClick={() => toggleTask(companies.find((c) => c.id === t.cid), t.id)}>完了にする</button>
                   </div>
                 );
               })}
@@ -278,14 +279,14 @@ export default function Portal() {
                   selected={selected.has(c.id)} onToggleSelect={() => toggleSelect(c.id)}
                   onStatus={(s) => setStatus(c.id, s)}
                   onEdit={() => setModal({ ...c })} onDelete={() => deleteCompanies([c.id])}
-                  onAddTask={addTask} onRemoveTask={removeTask} onDoneTask={doneTask} />
+                  onAddTask={addTask} onRemoveTask={removeTask} onToggleTask={toggleTask} />
               ))}
             </div>
           )}
         </>
       )}
 
-      {tab === 'calendar' && <CalendarView companies={companies} onDone={doneTask} />}
+      {tab === 'calendar' && <CalendarView companies={companies} onToggle={toggleTask} />}
 
       {tab === 'kanban' && <KanbanView companies={companies} onStatus={setStatus} />}
 
@@ -367,9 +368,10 @@ function FunnelStats({ companies, onPick, active }) {
   );
 }
 
-function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onDoneTask }) {
+function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onToggleTask }) {
   const [label, setLabel] = useState(TASK_LABELS[0]);
   const [date, setDate] = useState('');
+  const listId = `tasklabels-${c.id}`;
   const tasks = (c.tasks || []).slice().sort((a, b) => (a.date || '9').localeCompare(b.date || '9'));
   return (
     <div className={`card ${selected ? 'sel' : ''}`}>
@@ -391,7 +393,7 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
             <div key={t.id} className={`trow ${t.done ? 'done' : urgency(diff)}`}>
               <span className="tdot" />
               <span className="tlabel">{t.label}{t.date ? ` ${t.date.slice(5).replace('-', '/')}` : ''}</span>
-              {!t.done && <button className="tdone" onClick={() => onDoneTask(c, t.id)} title="完了にする">✓</button>}
+              <button className="tdone" onClick={() => onToggleTask(c, t.id)} title={t.done ? '未完了に戻す' : '完了にする'}>{t.done ? '↩' : '✓'}</button>
               <span className="tcount">{t.done ? '完了' : (diff !== null ? n + u : '')}</span>
               <button className="tx" onClick={() => onRemoveTask(c, t.id)}>✕</button>
             </div>
@@ -399,9 +401,10 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
         })}
       </div>
       <div className="add-task-mini">
-        <select value={label} onChange={(e) => setLabel(e.target.value)}>{TASK_LABELS.map((l) => <option key={l}>{l}</option>)}</select>
+        <input type="text" list={listId} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="種別（自由入力可）" />
+        <datalist id={listId}>{TASK_LABELS.map((l) => <option key={l} value={l} />)}</datalist>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => { onAddTask(c, label, date); setDate(''); }}>＋</button>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11 }} onClick={() => { if (!label.trim()) return; onAddTask(c, label.trim(), date); setDate(''); }}>＋</button>
       </div>
       {(c.mypage_url || c.es_doc_url) && (
         <div className="links">
@@ -416,7 +419,7 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
   );
 }
 
-function CalendarView({ companies, onDone }) {
+function CalendarView({ companies, onToggle }) {
   const today = new Date();
   const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const byDate = {};
@@ -454,8 +457,8 @@ function CalendarView({ companies, onDone }) {
               {items.map((t) => {
                 const diff = dayDiff(t.date);
                 return (
-                  <div key={t.id} className={`cal-chip ${t.done ? 'done' : urgency(diff)}`} title={`${t.co} ${t.label}`}
-                       onClick={() => !t.done && onDone(companies.find((c) => c.id === t.cid), t.id)}>
+                  <div key={t.id} className={`cal-chip ${t.done ? 'done' : urgency(diff)}`} title={`${t.co} ${t.label}（クリックで完了/未完了）`}
+                       onClick={() => onToggle(companies.find((c) => c.id === t.cid), t.id)}>
                     <span className="cal-chip-co">{t.co}</span> {t.label}
                   </div>
                 );
@@ -464,7 +467,7 @@ function CalendarView({ companies, onDone }) {
           );
         })}
       </div>
-      <div className="muted" style={{ marginTop: 10 }}>チップをクリックすると完了にできます。色：<span className="legend over">超過</span> <span className="legend urgent">3日内</span> <span className="legend warn">7日内</span></div>
+      <div className="muted" style={{ marginTop: 10 }}>チップをクリックで完了/未完了を切り替え（誤クリックも再クリックで戻せます）。色：<span className="legend over">超過</span> <span className="legend urgent">3日内</span> <span className="legend warn">7日内</span></div>
     </div>
   );
 }
