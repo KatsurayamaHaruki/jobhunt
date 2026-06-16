@@ -137,7 +137,9 @@ input,select,textarea{font-family:inherit}
 .prompt-tmpl{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .prompt-tmpl-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;font-size:12px;font-weight:600;color:var(--ink-soft);border-bottom:1px solid var(--line);flex-wrap:wrap}
 .prompt-tmpl-head .btn{padding:4px 12px;font-size:12px}
-.prompt-tmpl-body{margin:0;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--ink);overflow-x:auto}
+.prompt-tmpl-body{margin:0;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--ink);overflow-x:auto;word-break:break-all}
+.phaseb-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid #D5DAF5;border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.phaseb-bar .muted{flex:1;min-width:200px}
 .docs-status{font-size:12px;margin-left:10px}
 .docs-status.set{color:var(--calm)} .docs-status.unset{color:var(--warn)}
 

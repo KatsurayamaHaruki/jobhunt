@@ -26,6 +26,9 @@ ESページ（このブラウザで開いている）: 〈URL〉
 特記事項: 〈あれば〉
 
 まず、開いているESページから設問と文字数上限を一覧化して見せて。その後に下書きへ進んで。`;
+
+// フェーズA用ブックマークレット：ESページで押すと、そのURLを埋めたプロンプトをクリップボードにコピーする
+const PHASE_A_BOOKMARKLET = `javascript:(function(){var u=location.href,t=document.title;var p="就活ポータル(https://job-hunt-pi-orpin.vercel.app/)の資料タブ先頭『AIへの作業指示』に従う。\\nいま開いているこのESページ（"+t+" / "+u+"）について:\\n1) 設問と文字数上限を全部読み取り一覧化して見せる\\n2) ポータルの自己分析マスター資料・基本プロフィールと『ES作成→設問別』の過去ESを根拠に各設問の解答例を作成（だ・である/結論先行/上限ギリギリ目標・最低90%超・超過禁止/事実のみ無ければ[要確認]/具体定量）\\n3) 各設問を『ES作成→企業別→該当社→＋ESを追加』で 設問・上限・本文として保存\\nここで停止。提出はしない。";navigator.clipboard.writeText(p).then(function(){alert('フェーズAプロンプトをコピーしました。\\nこのESページを読めるClaudeアプリに貼り付け（Ctrl+V）→送信してください。');},function(){window.prompt('下記を手動コピーしてClaudeに貼ってください:',p);});})();`;
 // 締切タスクの日時表示。時刻未設定（=23:59）は日付のみ、明示時刻のときだけ時刻を出す。
 function fmtWhen(t) {
   if (!t.date) return '';
@@ -335,6 +338,16 @@ export default function Portal() {
               </div>
               <pre className="prompt-tmpl-body">{PROMPT_TEMPLATE}</pre>
             </div>
+            <div className="prompt-tmpl">
+              <div className="prompt-tmpl-head">
+                <span>🔖 フェーズA ブックマークレット（ESページで1クリック→URL入りプロンプトをコピー）</span>
+                <button className="btn" onClick={() => { navigator.clipboard?.writeText(PHASE_A_BOOKMARKLET); showToast('ブックマークレットをコピーしました'); }}>コピー</button>
+              </div>
+              <pre className="prompt-tmpl-body">{PHASE_A_BOOKMARKLET}</pre>
+              <div className="muted" style={{ padding: '0 12px 12px' }}>
+                使い方：ブラウザのブックマークを新規作成し、URL欄に上をペースト（名前は「ES→Claude」等）。各社のESページで押すと、そのページURL入りのフェーズAプロンプトがコピーされるので、Claudeアプリに貼り付けて送信。
+              </div>
+            </div>
           </div>
           <div className="note">ここに置いた資料は、ES作成の根拠として参照されます。<strong>パスワード等の秘密情報は入れないでください。</strong></div>
           <div className="es-card" style={{ marginBottom: 16 }}>
@@ -636,6 +649,13 @@ function ESByCompany({ companies, onSaveDrafts, showToast }) {
     if (!confirm('この下書きを削除しますか？')) return;
     onSaveDrafts(companyId, drafts.filter((_, j) => j !== i));
   }
+  // フェーズB：確定済みES本文を丸ごと埋め込んだ「自動入力」プロンプトをコピー
+  function copyPhaseB() {
+    const body = drafts.map((d, i) => `【設問${i + 1}】（${d.limit ? d.limit + '字以内' : '字数指定なし'}）\n${d.question || '(設問未記録)'}\n―本文―\n${d.text}`).join('\n\n');
+    const p = `いま開いている${co.name}のES入力フォームに、以下の各設問の本文を一字一句そのまま入力して。生成・改変・要約は禁止（コピーのみ）。各欄が文字数上限内かを確認し、提出ボタンは押さず私の確認で止めて。完了したらポータルの${co.name}のステータスを「ES提出」に更新して。\n\n${body}`;
+    navigator.clipboard?.writeText(p);
+    showToast('フェーズB（自動入力）プロンプトをコピーしました');
+  }
 
   return (
     <>
@@ -654,7 +674,15 @@ function ESByCompany({ companies, onSaveDrafts, showToast }) {
           <ESAddForm onAdd={(d) => { onSaveDrafts(companyId, [{ id: crypto.randomUUID(), ...d, savedAt: new Date().toISOString() }, ...drafts]); showToast('ESを保存しました'); }} />
           {drafts.length === 0
             ? <div className="emptystate">{co.name} の保存済みESはまだありません。上の「＋ ESを追加」、または Claude Code で生成すると入ります。</div>
-            : drafts.map((d, i) => <ESDraft key={d.id || i} draft={d} onSave={(t) => updateDraft(i, t)} onRemove={() => removeDraft(i)} />)}
+            : (
+              <>
+                <div className="phaseb-bar">
+                  <button className="btn primary" onClick={copyPhaseB}>🤖 フェーズB：このESを自動入力するプロンプトをコピー</button>
+                  <span className="muted">コピー後、{co.name}のES入力ページを開いたClaudeアプリに貼り付け（Ctrl+V→送信）。改修済み本文を会社フォームへ転記します。</span>
+                </div>
+                {drafts.map((d, i) => <ESDraft key={d.id || i} draft={d} onSave={(t) => updateDraft(i, t)} onRemove={() => removeDraft(i)} />)}
+              </>
+            )}
         </>
       )}
     </>
