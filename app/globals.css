@@ -66,6 +66,14 @@ input,select,textarea{font-family:inherit}
 .trow .tlabel{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trow .tcount{font-family:var(--mono);color:var(--ink-soft);font-size:11px}
 .trow .tx{border:none;background:none;color:var(--ink-soft);padding:0 2px}
+.trow .tedit{border:none;background:none;color:var(--ink-soft);padding:0 2px;font-size:11px}
+.trow .tedit:hover{color:var(--primary)}
+.trow.editing{flex-wrap:wrap;gap:5px;background:var(--line-soft);border-radius:7px;padding:6px}
+.trow.editing select,.trow.editing input{font-size:11px;padding:3px 5px;border:1px solid var(--line);border-radius:5px}
+.trow.editing input[type=text]{flex:1;min-width:60px}
+.trow.editing input[type=date]{flex:1;min-width:0}
+.trow.editing input[type=time]{width:82px}
+.trow.editing .tsave{border:none;background:var(--primary);color:#fff;border-radius:5px;padding:3px 10px;font-size:11px}
 .links{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:2px}
 .memo{font-size:12px;color:var(--ink-soft);white-space:pre-wrap}
 .es-tag{font-size:11px;color:var(--calm);font-weight:600}

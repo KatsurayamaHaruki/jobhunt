@@ -16,11 +16,11 @@ function urgency(x) { if (x === null) return ''; if (x < 0) return 'over'; if (x
 function countText(x) { if (x === null) return ['—', '']; if (x < 0) return [String(-x), '日超過']; if (x === 0) return ['今日', '']; return [String(x), '日後']; }
 function statusClass(s) { if (s === '内定') return 'win'; if (s === '見送り') return 'lose'; if (LIVE.has(s)) return 'live'; return ''; }
 const blank = { name: '', category: CATS[0], vote: 'B', status: '検討中', mypage_url: '', es_doc_url: '', login_id: '', links: [], memo: '' };
-// 締切タスクの日時表示（time は任意）
+// 締切タスクの日時表示。時刻未設定（=23:59）は日付のみ、明示時刻のときだけ時刻を出す。
 function fmtWhen(t) {
   if (!t.date) return '';
   const md = t.date.slice(5).replace('-', '/');
-  return t.time ? `${md} ${t.time}` : md;
+  return (t.time && t.time !== '23:59') ? `${md} ${t.time}` : md;
 }
 
 export default function Portal() {
@@ -135,9 +135,12 @@ export default function Portal() {
 
   function addTask(c, label, date, time) {
     if (!date) { showToast('日付を選んで'); return; }
-    const task = { id: crypto.randomUUID(), label, date, done: false };
-    if (time) task.time = time;
+    // 時刻未設定はその日の締切として 23:59 に丸める
+    const task = { id: crypto.randomUUID(), label, date, time: time || '23:59', done: false };
     patchCompany(c.id, { tasks: [...(c.tasks || []), task] });
+  }
+  function updateTask(c, tid, patch) {
+    patchCompany(c.id, { tasks: (c.tasks || []).map((t) => (t.id === tid ? { ...t, ...patch } : t)) });
   }
   function removeTask(c, tid) { patchCompany(c.id, { tasks: (c.tasks || []).filter((t) => t.id !== tid) }); }
   // 完了 ↔ 未完了 をトグル（誤クリックしても再クリックで戻せる）
@@ -290,7 +293,7 @@ export default function Portal() {
                   selected={selected.has(c.id)} onToggleSelect={() => toggleSelect(c.id)}
                   onStatus={(s) => setStatus(c.id, s)}
                   onEdit={() => setModal({ ...c })} onDelete={() => deleteCompanies([c.id])}
-                  onAddTask={addTask} onRemoveTask={removeTask} onToggleTask={toggleTask} />
+                  onAddTask={addTask} onRemoveTask={removeTask} onToggleTask={toggleTask} onUpdateTask={updateTask} />
               ))}
             </div>
           )}
@@ -379,7 +382,58 @@ function FunnelStats({ companies, onPick, active }) {
   );
 }
 
-function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onToggleTask }) {
+function TaskRow({ c, t, onToggle, onRemove, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const preset = TASK_LABELS.includes(t.label);
+  const [label, setLabel] = useState(preset ? t.label : OTHER_LABEL);
+  const [custom, setCustom] = useState(preset ? '' : t.label);
+  const [date, setDate] = useState(t.date || '');
+  const [time, setTime] = useState(t.time && t.time !== '23:59' ? t.time : '');
+
+  function startEdit() {
+    setLabel(preset ? t.label : OTHER_LABEL);
+    setCustom(preset ? '' : t.label);
+    setDate(t.date || '');
+    setTime(t.time && t.time !== '23:59' ? t.time : '');
+    setEditing(true);
+  }
+  function save() {
+    const lab = label === OTHER_LABEL ? custom.trim() : label;
+    if (!lab || !date) return;
+    onUpdate(c, t.id, { label: lab, date, time: time || '23:59' });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="trow editing">
+        <select value={label} onChange={(e) => setLabel(e.target.value)}>
+          {TASK_LABELS.map((l) => <option key={l}>{l}</option>)}
+          <option value={OTHER_LABEL}>{OTHER_LABEL}</option>
+        </select>
+        {label === OTHER_LABEL && <input type="text" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="種別" />}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} title="時刻（任意・空なら23:59）" />
+        <button className="tsave" onClick={save} title="保存">保存</button>
+        <button className="tx" onClick={() => setEditing(false)} title="キャンセル">✕</button>
+      </div>
+    );
+  }
+
+  const diff = dayDiff(t.date); const [n, u] = countText(diff);
+  return (
+    <div className={`trow ${t.done ? 'done' : urgency(diff)}`}>
+      <span className="tdot" />
+      <span className="tlabel">{t.label}{t.date ? ` ${fmtWhen(t)}` : ''}</span>
+      <button className="tedit" onClick={startEdit} title="編集">✎</button>
+      <button className="tdone" onClick={() => onToggle(c, t.id)} title={t.done ? '未完了に戻す' : '完了にする'}>{t.done ? '↩' : '✓'}</button>
+      <span className="tcount">{t.done ? '完了' : (diff !== null ? n + u : '')}</span>
+      <button className="tx" onClick={() => onRemove(c, t.id)}>✕</button>
+    </div>
+  );
+}
+
+function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, onAddTask, onRemoveTask, onToggleTask, onUpdateTask }) {
   const [label, setLabel] = useState(TASK_LABELS[0]);
   const [custom, setCustom] = useState('');
   const [date, setDate] = useState('');
@@ -399,18 +453,9 @@ function CompanyCard({ c, selected, onToggleSelect, onStatus, onEdit, onDelete, 
       </select>
       <div className="tasks">
         {tasks.length === 0 && <div className="muted">締切タスクなし</div>}
-        {tasks.map((t) => {
-          const diff = dayDiff(t.date); const [n, u] = countText(diff);
-          return (
-            <div key={t.id} className={`trow ${t.done ? 'done' : urgency(diff)}`}>
-              <span className="tdot" />
-              <span className="tlabel">{t.label}{t.date ? ` ${fmtWhen(t)}` : ''}</span>
-              <button className="tdone" onClick={() => onToggleTask(c, t.id)} title={t.done ? '未完了に戻す' : '完了にする'}>{t.done ? '↩' : '✓'}</button>
-              <span className="tcount">{t.done ? '完了' : (diff !== null ? n + u : '')}</span>
-              <button className="tx" onClick={() => onRemoveTask(c, t.id)}>✕</button>
-            </div>
-          );
-        })}
+        {tasks.map((t) => (
+          <TaskRow key={t.id} c={c} t={t} onToggle={onToggleTask} onRemove={onRemoveTask} onUpdate={onUpdateTask} />
+        ))}
       </div>
       <div className="add-task-mini">
         <select value={label} onChange={(e) => setLabel(e.target.value)}>
@@ -488,7 +533,7 @@ function CalendarView({ companies, onToggle }) {
                 return (
                   <div key={t.id} className={`cal-chip ${t.done ? 'done' : urgency(diff)}`} title={`${t.co} ${t.label}（クリックで完了/未完了）`}
                        onClick={() => onToggle(companies.find((c) => c.id === t.cid), t.id)}>
-                    {t.time && <span className="cal-chip-time">{t.time}</span>}<span className="cal-chip-co">{t.co}</span> {t.label}
+                    {t.time && t.time !== '23:59' && <span className="cal-chip-time">{t.time}</span>}<span className="cal-chip-co">{t.co}</span> {t.label}
                   </div>
                 );
               })}

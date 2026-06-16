@@ -91,9 +91,8 @@ try {
     if (o.time && !/^\d{2}:\d{2}$/.test(o.time)) throw new Error('時刻は HH:MM');
     const tasks = c.tasks || [];
     if (tasks.some((t) => t.label === label && t.date === date)) { console.log(`= 重複スキップ: ${c.name} ${label} ${date}`); process.exit(0); }
-    const task = { id: cryptoId(), label, date, done: false };
-    if (o.time) task.time = o.time;
-    const when = `${date}${o.time ? ' ' + o.time : ''}`;
+    const task = { id: cryptoId(), label, date, time: o.time || '23:59', done: false };
+    const when = `${date} ${task.time}`;
     const { error } = await db.from('companies').update({ tasks: [...tasks, task] }).eq('id', c.id);
     if (error) throw error;
     await logChange(db, { companyId: c.id, companyName: c.name, field: 'task', newValue: `${label} ${when}`, source: o.source || 'manual', evidence: o.evidence });
