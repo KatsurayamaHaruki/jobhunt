@@ -574,6 +574,27 @@ function KanbanView({ companies, onStatus }) {
 }
 
 function ESPanel({ companies, onSaveDrafts, showToast }) {
+  const [mode, setMode] = useState('company');
+  const totalDrafts = companies.reduce((n, c) => n + (c.es_drafts || []).length, 0);
+  return (
+    <>
+      <div className="note">
+        ES下書きの<strong>生成は Claude Code（サブスク）が行います</strong>（API課金なし）。Claude に
+        <code> tools/playbooks/es-generate.md </code>を渡し「○○社の設問〜を書いて」と頼むと、台帳・マスター資料を文脈にルール適用で下書きし、
+        <code> jobctl save-es </code>でここに保存されます。<strong>「設問別」タブで過去ESを設問ごとに横断参照すれば、似た設問は生成し直さず流用でき、トークンを節約できます。</strong>
+      </div>
+      <div className="es-modeswitch">
+        <button className={mode === 'company' ? 'on' : ''} onClick={() => setMode('company')}>企業別</button>
+        <button className={mode === 'question' ? 'on' : ''} onClick={() => setMode('question')}>設問別（横断）{totalDrafts ? ` ・ 全${totalDrafts}件` : ''}</button>
+      </div>
+      {mode === 'company'
+        ? <ESByCompany companies={companies} onSaveDrafts={onSaveDrafts} showToast={showToast} />
+        : <ESByQuestion companies={companies} showToast={showToast} />}
+    </>
+  );
+}
+
+function ESByCompany({ companies, onSaveDrafts, showToast }) {
   const [companyId, setCompanyId] = useState('');
   const co = companies.find((c) => c.id === companyId);
   const drafts = co?.es_drafts || [];
@@ -590,11 +611,6 @@ function ESPanel({ companies, onSaveDrafts, showToast }) {
 
   return (
     <>
-      <div className="note">
-        ES下書きの<strong>生成は Claude Code（サブスク）が行います</strong>（API課金なし）。Claude に
-        <code> tools/playbooks/es-generate.md </code>を渡し「○○社の設問〜を書いて」と頼むと、台帳・マスター資料を文脈にルール適用で下書きし、
-        <code> jobctl save-es </code>でここに保存されます。<strong>このタブは保存された下書きを確認・微修正する場所です。</strong>
-      </div>
       <div className="es-card" style={{ marginBottom: 16 }}>
         <div className="field"><label>企業</label>
           <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
@@ -610,6 +626,45 @@ function ESPanel({ companies, onSaveDrafts, showToast }) {
       ) : (
         drafts.map((d, i) => <ESDraft key={d.id || i} draft={d} onSave={(t) => updateDraft(i, t)} onRemove={() => removeDraft(i)} />)
       )}
+    </>
+  );
+}
+
+// 設問別の横断ビュー：全企業のESを設問でグルーピングし、検索・コピーで再利用しやすくする
+function ESByQuestion({ companies, showToast }) {
+  const [query, setQuery] = useState('');
+  const all = companies.flatMap((c) => (c.es_drafts || []).map((d) => ({ ...d, company: c.name })));
+  const q = query.trim().toLowerCase();
+  const filtered = q ? all.filter((d) => (d.question || '').toLowerCase().includes(q) || (d.text || '').toLowerCase().includes(q)) : all;
+
+  const groups = {};
+  filtered.forEach((d) => { const k = (d.question || '（設問未記録）').trim(); (groups[k] = groups[k] || []).push(d); });
+  const ordered = Object.entries(groups).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ja'));
+
+  function copy(text) { navigator.clipboard?.writeText(text); showToast('本文をコピーしました'); }
+
+  if (all.length === 0) return <div className="emptystate">保存済みのESがまだありません。Claude Code で生成すると、ここに設問別で集まります。</div>;
+
+  return (
+    <>
+      <input className="searchbox" style={{ width: '100%', marginBottom: 14 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="🔍 設問・本文で検索（例: ガクチカ / 志望動機）" />
+      {ordered.length === 0 ? (
+        <div className="emptystate">「{query}」に一致するESはありません。</div>
+      ) : ordered.map(([question, items]) => (
+        <div key={question} className="es-qgroup">
+          <h3 className="es-q">{question}<span className="es-qn">{items.length}件</span></h3>
+          {items.map((d, i) => (
+            <div key={d.id || i} className="es-pastitem">
+              <div className="es-pasthead">
+                <span className="es-pastco">{d.company}</span>
+                <span className="muted">{jpLen(d.text)}字{d.limit ? ` / ${d.limit}` : ''}{d.savedAt ? ` ・ ${new Date(d.savedAt).toLocaleDateString('ja-JP')}` : ''}</span>
+                <button className="btn" style={{ padding: '3px 10px', fontSize: 12, marginLeft: 'auto' }} onClick={() => copy(d.text)}>本文コピー</button>
+              </div>
+              <div className="es-pasttext">{d.text}</div>
+            </div>
+          ))}
+        </div>
+      ))}
     </>
   );
 }
